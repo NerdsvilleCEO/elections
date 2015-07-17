@@ -108,16 +108,14 @@ def vote(election_alias):
     votes = models.Vote.of_user_on_election(
         SESSION, flask.g.fas_user.username, election.id, count=True)
 
-    if votes > 0:
-        flask.flash('You have already voted in the election!')
-        return safe_redirect_back()
+    revote = True if votes > 0 else False
 
     if election.voting_type.startswith('range'):
         return vote_range(election)
     elif election.voting_type == 'simple':
         return vote_simple(election)
     elif election.voting_type == 'select':
-        return vote_select(election)
+        return vote_select(election, revote)
     elif election.voting_type == 'irc':
         return vote_irc(election)
     else:  # pragma: no cover
@@ -179,7 +177,7 @@ def vote_range(election):
         nextaction=next_action)
 
 
-def vote_select(election):
+def vote_select(election, revote):
     votes = models.Vote.of_user_on_election(
         SESSION, flask.g.fas_user.username, election.id, count=True)
 
@@ -212,6 +210,16 @@ def vote_select(election):
             if form.action.data == 'submit':
                 for candidate in form:
                     if candidate.short_name in ['csrf_token', 'action']:
+                        continue
+
+                    if revote:
+                        vote = update(models.Vote).\
+                        where(models.Vote.candidate_id == cand_name[candidate.short_name]
+                        and models.Vote.voter == flask.g.fas_user.username
+                        and models.Vote.election == election.id).\
+                        values(value = int(candidate.data))
+                        SESSION.execute(vote)
+                        #break out of candidate loop
                         continue
 
                     new_vote = models.Vote(

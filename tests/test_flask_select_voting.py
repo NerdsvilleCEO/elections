@@ -55,14 +55,6 @@ class FlaskSimpleElectionstests(ModelFlasktests):
 
         self.setup_db()
 
-        user = FakeUser(['packager'], username='toshio')
-        with user_set(fedora_elections.APP, user):
-            output = self.app.get(
-                '/vote/test_election6', follow_redirects=True)
-            self.assertTrue(
-                'class="message">You have already voted in the election!</'
-                in output.data)
-
         user = FakeUser(['packager'], username='pingou')
         with user_set(fedora_elections.APP, user):
             output = self.app.get(
@@ -168,6 +160,39 @@ class FlaskSimpleElectionstests(ModelFlasktests):
             self.assertTrue('<h3>Next 1 elections</h3>' in output.data)
             self.assertTrue('<h3>Last 2 elections</h3>' in output.data)
 
+    def test_vote_select_revote(self):
+        """ Test the vote_select function - the re-voting part. """
+        #First we need to vote
+        self.setup_db()
+
+        user = FakeUser(['packager'], username='pingou')
+        with user_set(fedora_elections.APP, user):
+            retrieve_csrf = self.app.post('/vote/test_election6')
+            csrf_token = retrieve_csrf.data.split(
+                'name="csrf_token" type="hidden" value="')[1].split('">')[0]
+            data = {
+                'Toshio': True,
+                'action': 'submit',
+                'csrf_token': csrf_token,
+            }
+            self.app.post('/vote/test_election6', data=data, follow_redirects=True)
+        #Let's not do repetition of what is tested above we aren't testing the functionality of voting as that has already been asserted
+        #Next, we need to try revoting
+            newdata = {
+                'Toshio': False,
+                'action': 'submit',
+                'csrf_token': csrf_token,
+            }
+            output = self.app.post('/vote/test_election6', data=newdata, follow_redirects=True)
+        #Next, we need to check if the vote has been recorded
+            self.assertEqual(output.status_code, 200)
+            self.assertTrue(
+                'class="message">Your vote has been recorded.  Thank you!</'
+                in output.data)
+            self.assertTrue('<h3>Current elections</h3>' in output.data)
+            self.assertTrue('<h3>Next 1 elections</h3>' in output.data)
+            self.assertTrue('<h3>Last 2 elections</h3>' in output.data)
+        #If we haven't failed yet, HOORAY!
 
 if __name__ == '__main__':
     SUITE = unittest.TestLoader().loadTestsFromTestCase(
